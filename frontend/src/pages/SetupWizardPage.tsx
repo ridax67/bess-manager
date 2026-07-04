@@ -112,7 +112,12 @@ const SetupWizardPage: React.FC = () => {
       const autoArea = hasOfficialNordpool ? d.nordpoolArea : d.nordpoolCustomArea;
       setPricingForm(f => ({
         ...f,
-        ...(d.pricingDefaults ?? {}),
+        // Only seed spot-multiplier defaults when the provider is newly
+        // auto-detected (changing) — never on a re-scan of an already
+        // configured provider, or this would clobber a saved custom
+        // contract-specific value (e.g. a real Luminus vs. non-Luminus
+        // ENTSO-e multiplier) every time the wizard mounts or rescans.
+        ...(autoProvider && autoProvider !== f.provider ? (d.pricingDefaults ?? {}) : {}),
         ...(autoProvider ? { provider: autoProvider } : {}),
         ...(d.currency ? { currency: d.currency } : {}),
         ...(autoArea ? { area: autoArea } : {}),
