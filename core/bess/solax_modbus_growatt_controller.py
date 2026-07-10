@@ -269,6 +269,7 @@ class SolaxModbusGrowattController(GrowattMinController):
             intent: Strategic intent string
             discharge_rate: Discharge rate 0-100% from schedule
             grid_charge: Whether grid charging is active
+            current_soc: Current battery SOC (0-100%), used for low export decision
 
         Returns:
             Tuple of (vpp_power, vpp_control)
@@ -277,16 +278,14 @@ class SolaxModbusGrowattController(GrowattMinController):
             if discharge_rate >= VPP_EXPORT_THRESHOLD_PCT:
                 return -100, 1
             else:
-                return 0, 0
+                # Low discharge rate — use load first if battery full,
+                # otherwise grid first with actual power for reactive control
+                if current_soc is not None and current_soc >= 100:
+                    return 0, 0
+                return -discharge_rate, 1
         elif intent == "GRID_CHARGING":
             # TODO: AC charging power set to 40% — change value here if needed
             return 40, 1
-        elif intent == "SOLAR_EXPORT":
-            # Battery full → load first, solar exports naturally without draining battery.
-            # Battery not full → grid first power=0, prevents solar from charging battery.
-            if current_soc is not None and current_soc >= 100:
-                return 0, 0
-            return 0, 1
         else:
             # SOLAR_STORAGE, LOAD_SUPPORT, IDLE
             return 0, 0
@@ -318,7 +317,7 @@ class SolaxModbusGrowattController(GrowattMinController):
         if current_period < len(self.strategic_intents):
             intent = self.strategic_intents[current_period]
 
-        # Read current SOC for SOLAR_EXPORT decision
+        # Read current SOC for low BATTERY_EXPORT decision
         current_soc = controller.get_battery_soc()
 
         vpp_power, vpp_control = self._intent_to_vpp(
@@ -391,12 +390,15 @@ class SolaxModbusGrowattController(GrowattMinController):
 
         # AC charging is permanently enabled — no dynamic control needed
 
-        # Signal reactive automation to run when SOLAR_EXPORT is active.
-        # The automation varies VPP Power between -100 and 0 to keep grid
-        # exchange near zero. Only SOLAR_EXPORT uses reactive control —
-        # BATTERY_EXPORT and GRID_CHARGING use fixed power values.
+        # Signal reactive automation when VPP is active with low power —
+        # automation varies VPP Power to keep grid exchange near zero.
+        # Not needed for full export (>= 50%) or charging (fixed values).
         try:
-            reactive_control = intent == "SOLAR_EXPORT"
+            reactive_control = (
+                vpp_control == 1
+                and intent == "BATTERY_EXPORT"
+                and discharge_rate < VPP_EXPORT_THRESHOLD_PCT
+            )
             controller._service_call_with_retry(
                 "input_boolean",
                 "turn_on" if reactive_control else "turn_off",
