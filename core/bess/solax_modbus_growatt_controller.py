@@ -438,9 +438,20 @@ class SolaxModbusGrowattController(GrowattMinController):
                 logger.error("FAILED: Reset VPP timer: %s", e)
                 errors.append(str(e))
 
-        # Write VPP power only when intent changes — reactive automation
-        # handles subsequent periods in the same intent series.
-        if is_new_intent and vpp_power != self._last_written_vpp_power:
+        # Write VPP power when intent changes or when crossing the export
+        # threshold (low↔high) within BATTERY_EXPORT — reactive automation
+        # handles subsequent periods within the same mode.
+        last_was_high = (
+            self._last_written_vpp_power is not None
+            and self._last_written_vpp_power <= -VPP_EXPORT_THRESHOLD_PCT
+        )
+        current_is_high = discharge_rate >= VPP_EXPORT_THRESHOLD_PCT
+        threshold_crossed = (
+            intent == "BATTERY_EXPORT" and last_was_high != current_is_high
+        )
+        should_write_power = (is_new_intent or threshold_crossed) and vpp_power != self._last_written_vpp_power
+
+        if should_write_power:
             try:
                 logger.info(
                     "HARDWARE: VPP power %s%% -> %d%% (new intent: %s)",
