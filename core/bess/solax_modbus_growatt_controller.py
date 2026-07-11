@@ -27,8 +27,8 @@ reset the fallback timer. If BESS stops writing, inverter returns to
 load_first after 20 minutes automatically.
 
 Intent → VPP mapping:
-    BATTERY_EXPORT (SOC=100%, rate<50%)  → vpp_power=0,            vpp_control=0 (load first)
-    BATTERY_EXPORT (SOC<100% or rate>=50%)→ vpp_power=-rate,        vpp_control=1
+    BATTERY_EXPORT (SOC=100%, rate<30%)  → vpp_power=0,            vpp_control=0 (load first)
+    BATTERY_EXPORT (SOC<100% or rate>=30%)→ vpp_power=-rate,        vpp_control=1
     GRID_CHARGING                        → vpp_power=<calculated>,  vpp_control=1
     SOLAR_STORAGE                        → vpp_power=0,             vpp_control=0
     LOAD_SUPPORT                         → vpp_power=0,             vpp_control=0
@@ -76,7 +76,7 @@ VPP_FALLBACK_MINUTES = 20
 
 # Discharge rate threshold — below this, reactive automation handles export.
 # Above this, we use the actual discharge_rate directly.
-VPP_EXPORT_THRESHOLD_PCT = 50
+VPP_EXPORT_THRESHOLD_PCT = 30
 
 
 class SolaxModbusGrowattController(GrowattMinController):
@@ -556,20 +556,9 @@ class SolaxModbusGrowattController(GrowattMinController):
             else:
                 self._disable_vpp_remote_control(controller)
 
-            logger.info("HARDWARE: VPP Power -> %d%%", vpp_power)
-            controller._service_call_with_retry(
-                "number",
-                "set_value",
-                operation=f"VPP set initial power -> {vpp_power}%",
-                entity_id=VPP_POWER_ENTITY,
-                value=vpp_power,
-            )
-            if not controller.test_mode:
-                self._last_written_vpp_power = vpp_power
-
             logger.info(
-                "VPP: Initial write — power=%d%% control=%d (period %d, intent %s)",
-                vpp_power,
+                "VPP: Initial mode set — control=%d (period %d, intent %s) — "
+                "power will be written by apply_period",
                 vpp_control,
                 current_period,
                 intent,
