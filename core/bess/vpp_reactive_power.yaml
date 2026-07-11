@@ -1,1 +1,99 @@
+# This is an automation to automatically adjust the power when in
+# grid mode and battery mode.  Load mode is handled by the inverter.
+# This automation is run each time the P1 meter is updated and
+# power is adjusted.  In grid mode for low power values it is
+# used to output just as much from the battery as needed to zero
+# out the house consumption.  In battery mode the power is adjusted
+# to reach the configured energy per hour.
+#
+# Edit the file to suit your HA confuguration
+# triggers:
+#   entity_id: Enter your P1 power meter entity here
+# actions:
+#   variables:
+#     watt_per_percent: Enter the value of your inverters output in W/100
+#     p1_power: Enter your P1 power meter entity here as well
+#     p1_ack_hour: Enter a sensor name that returns the current hour's energy consumption
+#
+# You also need to create a helper (Settings-Devices/Services-Helper-Create
+# Select Input selection and name it vpp_reactive_control with selections
+# off/grid_first/battery_first
+#
+alias: VPP effektreglering
+description: ""
+triggers:
+  - trigger: state
+    entity_id: sensor.myp1_power
+actions:
+  - variables:
+      watt_per_percent: 100
+      p1_power: sensor.myp1_power
+      p1_ack_hour: sensor.aktuell_timraknare
+  - choose:
+      - conditions:
+          - condition: state
+            entity_id: input_select.vpp_reactive_control
+            state: grid_first
+        sequence:
+          - variables:
+              p1: "{{ states(p1_power) | float(0) }}"
+              current: "{{ states('number.growatt_inverter_vpp_power') | int }}"
+              delta: "{{ (p1 / watt_per_percent) | round(0) | int }}"
+              target: |
+                {% set v = current - delta %} {% if v < -100 %}
+                  -100
+                {% elif v > 1 %}
+                  1
+                {% else %}
+                  {{ v }}
+                {% endif %}
+          - if:
+              - condition: template
+                value_template: "{{ target | int != current }}"
+            then:
+              - action: number.set_value
+                target:
+                  entity_id: number.growatt_inverter_vpp_power
+                data:
+                  value: "{{ target | int }}"
+      - conditions:
+          - condition: state
+            entity_id: input_select.vpp_reactive_control
+            state: battery_first
+        sequence:
+          - variables:
+              p1: "{{ states(p1_power) | float(0) }}"
+              current: "{{ states('number.growatt_inverter_vpp_power') | int }}"
+              current_kwh: "{{ states(p1_ack_hour) | float(0) }}"
+              target_kwh: >-
+                {{ states('number.growatt_inverter_max_charge_power_from_grid')
+                | float(0) }}
+              remaining_time_hours: "{{ (60 - now().minute) / 60 }}"
+              target: |
+                {% set rem = remaining_time_hours | float %} {% if rem <= 0 %}
+                  1
+                {% else %}
+                  {% set watts = ((target_kwh - current_kwh) * 1000) / rem %}
+                  {% set current_charge = current * watt_per_percent %}
+                  {% set house_load = p1 - current_charge %}
+                  {% set required_charge = watts - house_load %}
+                  {% set v = (required_charge / watt_per_percent) | round(0) | int %}
 
+                  {% if v < 1 %}
+                    1
+                  {% elif v > 100 %}
+                    100
+                  {% else %}
+                    {{ v }}
+                  {% endif %}
+                {% endif %}
+          - if:
+              - condition: template
+                value_template: "{{ target | int != current }}"
+            then:
+              - action: number.set_value
+                target:
+                  entity_id: number.growatt_inverter_vpp_power
+                data:
+                  value: "{{ target | int }}"
+                  
