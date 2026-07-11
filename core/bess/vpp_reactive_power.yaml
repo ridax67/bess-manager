@@ -19,6 +19,9 @@
 # Select Input selection and name it vpp_reactive_control with selections
 # off/grid_first/battery_first
 #
+# The target battery charge level is taken from the Growatt parameter
+# number.growatt_inverter_max_charge_power_from_grid
+#
 alias: VPP effektreglering
 description: ""
 triggers:
