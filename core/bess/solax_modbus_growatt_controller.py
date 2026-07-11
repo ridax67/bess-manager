@@ -438,13 +438,15 @@ class SolaxModbusGrowattController(GrowattMinController):
                 logger.error("FAILED: Reset VPP timer: %s", e)
                 errors.append(str(e))
 
-        # Write VPP power — only on change
-        if vpp_power != self._last_written_vpp_power:
+        # Write VPP power only when intent changes — reactive automation
+        # handles subsequent periods in the same intent series.
+        if is_new_intent and vpp_power != self._last_written_vpp_power:
             try:
                 logger.info(
-                    "HARDWARE: VPP power %s%% -> %d%%",
+                    "HARDWARE: VPP power %s%% -> %d%% (new intent: %s)",
                     self._last_written_vpp_power,
                     vpp_power,
+                    intent,
                 )
                 controller._service_call_with_retry(
                     "number",
@@ -459,7 +461,11 @@ class SolaxModbusGrowattController(GrowattMinController):
                 logger.error("FAILED: Set VPP power to %d%%: %s", vpp_power, e)
                 errors.append(str(e))
         else:
-            logger.debug("VPP power unchanged at %d%%, skipping write", vpp_power)
+            logger.debug(
+                "VPP power write skipped — same intent series (intent=%s power=%d%%)",
+                intent,
+                vpp_power,
+            )
 
         # Set reactive control signal
         reactive = self._get_reactive_signal(intent, discharge_rate, vpp_control, is_new_intent)
@@ -596,14 +602,18 @@ class SolaxModbusGrowattController(GrowattMinController):
         """Sync SOC limits and enable AC charging permanently."""
         self.sync_soc_limits(controller)
         try:
-            logger.info("HARDWARE: VPP Allow AC charging -> Enabled (permanent)")
-            controller._service_call_with_retry(
-                "select",
-                "select_option",
-                operation="VPP enable AC charging (permanent)",
-                entity_id=VPP_ALLOW_AC_CHARGING_ENTITY,
-                option=VPP_ENABLE,
-            )
+            response = controller.get_entity_state_raw(VPP_ALLOW_AC_CHARGING_ENTITY)
+            if response and response.get("state") == VPP_ENABLE:
+                logger.info("VPP Allow AC charging already Enabled, skipping write")
+            else:
+                logger.info("HARDWARE: VPP Allow AC charging -> Enabled (permanent)")
+                controller._service_call_with_retry(
+                    "select",
+                    "select_option",
+                    operation="VPP enable AC charging (permanent)",
+                    entity_id=VPP_ALLOW_AC_CHARGING_ENTITY,
+                    option=VPP_ENABLE,
+                )
         except Exception as e:
             logger.error("FAILED: Set VPP Allow AC charging: %s", e)
 
