@@ -52,7 +52,11 @@ actions:
                 {% endif %}
           - if:
               - condition: template
-                value_template: "{{ target | int != current }}"
+                value_template: |
+                  {{
+                    target | int != current | int and
+                    states('sensor.growatt_inverter_run_mode') == 'Normal'
+                  }}
             then:
               - action: number.set_value
                 target:
@@ -68,7 +72,7 @@ actions:
               p1: "{{ states(p1_power) | float(0) }}"
               current: "{{ states('number.growatt_inverter_vpp_power') | int }}"
               current_kwh: "{{ states(p1_ack_hour) | float(0) }}"
-              target_kwh: >-
+              target_kwh: >
                 {{ states('number.growatt_inverter_max_charge_power_from_grid')
                 | float(0) }}
               remaining_time_hours: "{{ (60 - now().minute) / 60 }}"
@@ -92,11 +96,14 @@ actions:
                 {% endif %}
           - if:
               - condition: template
-                value_template: "{{ target | int != current }}"
+                value_template: |
+                  {{
+                    target | int != current | int and
+                    states('sensor.growatt_inverter_run_mode') == 'Normal'
+                  }}
             then:
               - action: number.set_value
                 target:
                   entity_id: number.growatt_inverter_vpp_power
                 data:
                   value: "{{ target | int }}"
-                  
