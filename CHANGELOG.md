@@ -4,6 +4,14 @@ All notable changes to BESS Battery Manager will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [9.9.0b12] - 2026-07-12
+
+Everything else accumulated in `Unreleased` on main (the daily savings history/aggregates, DP backward-induction rework, ENTSO-e/Belpex, export-miscrediting/threshold fixes, anti-cycling, GRID_CHARGING throttling/display, LOAD_SUPPORT, SOC limits flash-wear fix, Savings badge threshold fix, SolaX EMS write, release-pipeline/triage internals) already shipped in `v9.9.0b11`. This release covers only what's genuinely new since `v9.9.0b11`.
+
+### Changed
+
+- **Net Grid Cost replaces the wear-bundled headline; battery wear moved to its own Insights table; Savings page redesigned with Day/Month/Year drill-down** — The dashboard, Savings, and Insights pages now show **Net Grid Cost** (import − export, matching the physical meter) as the headline cost figure instead of a bundled figure that silently included modeled battery wear. **Net Savings** (wear-free, `Grid-Only Cost − Net Grid Cost`) is a new additive figure alongside it; the underlying savings/percentage-saved formula is unchanged. Battery wear no longer appears in any cost/savings headline — it now lives in a new **Battery Actions** table, moved from the Savings page to Insights, as a per-period breakdown of optimizer decisions. The Savings page's old rolling Week/Month/Year toggle is replaced by a **Day/Month/Year resolution selector with a date picker**, plus a Tibber-style History drill-down (year → month → day → hour), and the Scenario Comparison tab moved to Insights. ([#249](https://github.com/johanzander/bess-manager/issues/249), [#268](https://github.com/johanzander/bess-manager/pull/268))
+
 ## [9.9.0b11] - 2026-07-10
 
 Everything else accumulated in `Unreleased` on main (the DP backward-induction rework, ENTSO-e/Belpex, the export-miscrediting/threshold fixes, anti-cycling, GRID_CHARGING throttling/display, LOAD_SUPPORT) already shipped in `v9.9.0b10` — it was merged to main before that release's sync point (PR #254) even though `v9.9.0b10`'s own changelog entry didn't individually re-list every one of those PRs. This release covers only what's genuinely new since `v9.9.0b10`.
