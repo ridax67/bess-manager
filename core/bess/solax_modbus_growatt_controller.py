@@ -27,8 +27,8 @@ reset the fallback timer. If BESS stops writing, inverter returns to
 load_first after 20 minutes automatically.
 
 Intent → VPP mapping:
-    BATTERY_EXPORT (SOC=100%, rate<30%)  → vpp_power=0,            vpp_control=0 (load first)
-    BATTERY_EXPORT (SOC<100% or rate>=30%)→ vpp_power=-rate,        vpp_control=1
+    BATTERY_EXPORT (SOC=100%, rate<50%)  → vpp_power=0,            vpp_control=0 (load first)
+    BATTERY_EXPORT (SOC<100% or rate>=50%)→ vpp_power=-rate,        vpp_control=1
     GRID_CHARGING                        → vpp_power=<calculated>,  vpp_control=1
     SOLAR_STORAGE                        → vpp_power=0,             vpp_control=0
     LOAD_SUPPORT                         → vpp_power=0,             vpp_control=0
@@ -449,7 +449,14 @@ class SolaxModbusGrowattController(GrowattMinController):
         threshold_crossed = (
             intent == "BATTERY_EXPORT" and last_was_high != current_is_high
         )
-        should_write_power = (is_new_intent or threshold_crossed) and vpp_power != self._last_written_vpp_power
+        value_changed_high = (
+            intent == "BATTERY_EXPORT"
+            and current_is_high
+            and vpp_power != self._last_written_vpp_power
+        )
+        should_write_power = (
+            is_new_intent or threshold_crossed or value_changed_high
+        ) and vpp_power != self._last_written_vpp_power
 
         if should_write_power:
             try:
