@@ -10,7 +10,7 @@ set -e
 echo "Building BESS Manager add-on for Home Assistant (local installation)..."
 
 echo "Cleaning old build directory..."
-BUILD_DIR="./build/bess_manager"
+BUILD_DIR="./build/bess_manager_vpp"
 echo "Cleaning old build directory..."
 rm -rf "$BUILD_DIR"
 echo "Creating new build directory..."
@@ -31,7 +31,7 @@ cp backend/requirements.txt "$BUILD_DIR/requirements.txt"
 cp backend/run.sh "$BUILD_DIR/run.sh"
 # Use bess_manager/config.yaml as single source of truth, strip the GHCR
 # image line so HA builds locally instead of pulling from the registry.
-sed '/^image:/d' bess_manager/config.yaml > "$BUILD_DIR/config.yaml"
+sed '/^image:/d' bess_manager_vpp/config.yaml > "$BUILD_DIR/config.yaml"
 cp README.md "$BUILD_DIR/README.md"
 cp CHANGELOG.md "$BUILD_DIR/CHANGELOG.md"
 
@@ -45,15 +45,15 @@ cp -r frontend/dist/* "$BUILD_DIR/frontend/"
 
 # Create repository structure
 REPO_DIR="./build/repository"
-mkdir -p "$REPO_DIR/bess_manager"
-cp -r "$BUILD_DIR"/* "$REPO_DIR/bess_manager/"
+mkdir -p "$REPO_DIR/bess_manager_vpp"
+cp -r "$BUILD_DIR"/* "$REPO_DIR/bess_manager_vpp/"
 
 # Create repository.json
 cat > "$REPO_DIR/repository.json" << EOF
 {
-  "name": "BESS Battery Manager Repository",
-  "url": "https://github.com/johanzander/bess-manager",
-  "maintainer": "Johan Zander <johanzander@gmail.com>"
+  "name": "BESS Battery Manager Repository VPP",
+  "url": "https://github.com/ridax67/bess-manager",
+  "maintainer": "Mikael Wahlgren <mail@ridax.se>"
 }
 EOF
 
