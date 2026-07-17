@@ -176,6 +176,7 @@ class BatterySystemManager:
 
         # Discharge inhibit tracking
         self._desired_discharge_rate: int = 0  # Rate from schedule before inhibit
+        self._desired_grid_charge: bool = False  # grid_charge alongside the rate above
         self._last_applied_discharge_rate: int = 0  # Last rate written to inverter
 
         # Prediction caches (populated by _fetch_predictions)
@@ -1997,6 +1998,18 @@ class BatterySystemManager:
             )
 
             # Run DP optimization with strategic intent capture - returns OptimizationResult directly
+            discharge_resolution_kw = (
+                self._inverter_controller.discharge_resolution_kw(
+                    self.battery_settings.max_discharge_power_kw
+                )
+                if self._inverter_controller is not None
+                else None
+            )
+            self_throttle_export_threshold_kwh = (
+                self._inverter_controller.self_throttle_export_threshold_kwh
+                if self._inverter_controller is not None
+                else None
+            )
             result = optimize_battery_schedule(
                 buy_price=buy_prices,
                 sell_price=sell_prices,
@@ -2009,6 +2022,8 @@ class BatterySystemManager:
                 terminal_value_per_kwh=terminal_value,
                 currency=self.home_settings.currency,
                 max_charge_power_per_period=max_charge_power_per_period,
+                discharge_resolution_kw=discharge_resolution_kw,
+                self_throttle_export_threshold_kwh=self_throttle_export_threshold_kwh,
             )
 
             # Add timestamps to period data (algorithm is time-agnostic, operates on relative indices)
@@ -2163,13 +2178,22 @@ class BatterySystemManager:
                     f"No previous strategic intents available, initializing {num_periods} periods to IDLE"
                 )
 
-            # Fill in optimized periods from the new optimization result
+            # Fill in optimized periods from the new optimization result.
+            # Unlike full_day_strategic_intents (which carries forward real
+            # values for already-elapsed periods too, see above),
+            # full_day_period_data has no equivalent "previous" source to
+            # carry forward, so pre-optimization-period entries stay None
+            # -- the two lists are the same length but not both fully
+            # populated at the same indices. A future consumer zipping them
+            # together must treat None as "no data for this period."
+            full_day_period_data: list = [None] * len(full_day_strategic_intents)
             for i, period_data in enumerate(period_data_list):
                 target_period = optimization_period + i
                 if target_period < len(full_day_strategic_intents):
                     full_day_strategic_intents[target_period] = (
                         period_data.decision.strategic_intent
                     )
+                    full_day_period_data[target_period] = period_data
 
             # Store this run's actual starting SOE (kWh) in OptimizationResult.
             # Must always reflect what the DP started this specific run from,
@@ -2288,8 +2312,11 @@ class BatterySystemManager:
                 summary=summary_dict,  # Now properly converted to dict
                 solar_charged=solar_charged,
                 original_dp_results={
-                    "strategic_intent": full_day_strategic_intents
-                },  # Store strategic intents
+                    "strategic_intent": full_day_strategic_intents,
+                    "period_data": full_day_period_data,
+                },  # Store strategic intents and period data (#320: period_data is
+                # preparatory plumbing for a future controller-side flip-
+                # suppression feature, deferred, no consumer in this repo yet)
             )
 
             # Override the strategic intents in the schedule with corrected data
@@ -2475,8 +2502,18 @@ class BatterySystemManager:
         # solar/load dip. Allow that only when the stored energy is worth less
         # than buying from grid now (shadow_price = DP marginal value of
         # stored SoE). This is a sub-period hardware-robustness behaviour,
-        # invisible to the 15-min plan/sim.
-        if strategic_intent in ("SOLAR_EXPORT", "SOLAR_STORAGE"):
+        # invisible to the 15-min plan/sim. Only valid where discharge_rate is
+        # a load-following ceiling -- on platforms where it's an immediate
+        # forced power command (VPP-style control), opening the gate would
+        # force a full-power discharge instead of gently covering a dip (#324).
+        if (
+            strategic_intent
+            in (
+                "SOLAR_EXPORT",
+                "SOLAR_STORAGE",
+            )
+            and self._inverter_controller.discharge_rate_is_load_following
+        ):
             stored = self.schedule_store.get_latest_schedule()
             if stored is not None:
                 idx = period - stored.optimization_period
@@ -2494,6 +2531,7 @@ class BatterySystemManager:
         # Store the schedule's desired discharge rate before inhibit check so that
         # apply_discharge_inhibit() can restore it when the inhibit sensor clears.
         self._desired_discharge_rate = discharge_rate
+        self._desired_grid_charge = grid_charge
 
         # Check discharge inhibit (e.g. EV actively charging during Tibber grid award)
         if discharge_rate > 0:
@@ -3032,7 +3070,14 @@ class BatterySystemManager:
                 self._desired_discharge_rate,
             )
 
-        self.controller.set_discharging_power_rate(target_rate)
+        # Route through the inverter controller's own per-period write path
+        # (same as _apply_period_schedule) rather than writing the EMS
+        # discharge_rate entity directly -- on VPP-style platforms
+        # (discharge_rate_is_load_following False) that entity is never
+        # read by hardware, which made this a dead write there (#324).
+        self._inverter_controller.apply_period(
+            self.controller, self._desired_grid_charge, target_rate
+        )
         self._last_applied_discharge_rate = target_rate
 
     def get_settings(self):
