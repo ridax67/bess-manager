@@ -1,7 +1,8 @@
 ARG BUILD_FROM=python:3.13-alpine
 
 # Build frontend on native amd64 to avoid QEMU npm timeouts on ARM
-FROM --platform=linux/amd64 node:20-alpine AS frontend-builder
+# FROM --platform=linux/amd64 node:20-alpine AS frontend-builder
+FROM node:20-alpine AS frontend-builder
 ARG BUILD_VERSION
 WORKDIR /tmp/frontend
 RUN echo "Building frontend for version ${BUILD_VERSION}"
@@ -17,18 +18,18 @@ ARG BUILD_DATE
 ARG BUILD_REF
 
 LABEL \
-    io.hass.name="BESS Battery Manager" \
-    io.hass.description="Battery Energy Storage System optimization and management" \
+    io.hass.name="BESS Battery Manager VPP" \
+    io.hass.description="Battery Energy Storage System optimization and management VPP" \
     io.hass.version=${BUILD_VERSION} \
     io.hass.type="addon" \
     io.hass.arch="aarch64,amd64,armv7" \
-    maintainer="Johan Zander <johanzander@gmail.com>" \
+    maintainer="Mikael Wahlgren <mail@ridax.se>" \
     org.label-schema.build-date=${BUILD_DATE} \
-    org.label-schema.description="Battery Energy Storage System optimization and management" \
-    org.label-schema.name="BESS Battery Manager" \
+    org.label-schema.description="Battery Energy Storage System optimization and management VPP" \
+    org.label-schema.name="BESS Battery Manager VPP" \
     org.label-schema.schema-version="1.0" \
     org.label-schema.vcs-ref=${BUILD_REF} \
-    org.label-schema.vcs-url="https://github.com/johanzander/bess-manager"
+    org.label-schema.vcs-url="https://github.com/ridax67/bess-manager"
 
 RUN apk add --no-cache \
     python3 \
